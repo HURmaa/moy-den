@@ -18,7 +18,7 @@
 :root{
   --bg:#EDF0F4; --surface:#FFFFFF; --sunk:#F4F6F9; --ink:#141A22; --muted:#5D6878; --line:#DCE1E8;
   --accent:#2F55D4; --on-accent:#FFFFFF;
-  --sleep:#6A57CF; --water:#178FBA; --food:#D9711A; --piggy:#B8861F; --danger:#C93C4F; --ok:#2E9157; --warn:#C98A12;
+  --sleep:#6A57CF; --water:#178FBA; --food:#D9711A; --piggy:#B8861F; --danger:#C93C4F; --ok:#2E9157; --warn:#C98A12; --mass:#1E9488;
   --c-food:#3A9D5D; --c-transfer:#3B6FE0; --c-fuel:#D2475A; --c-market:#9B4FD0; --c-other:#7A8594;
   --display:"Unbounded", "Onest", system-ui, sans-serif;
   --body:"Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -28,7 +28,7 @@
 @media (prefers-color-scheme: dark){:root{
   --bg:#0E1318; --surface:#171E26; --sunk:#1E2731; --ink:#E8EDF3; --muted:#93A1B2; --line:#28323E;
   --accent:#7F9BFF; --on-accent:#0E1318;
-  --sleep:#9D8CF5; --water:#45BDE6; --food:#F29A4A; --piggy:#E2B24C; --danger:#F06C7E; --ok:#5CC786; --warn:#E8B44A;
+  --sleep:#9D8CF5; --water:#45BDE6; --food:#F29A4A; --piggy:#E2B24C; --danger:#F06C7E; --ok:#5CC786; --warn:#E8B44A; --mass:#3CC4B5;
   --c-food:#5CC27D; --c-transfer:#6F95F5; --c-fuel:#F06C7E; --c-market:#BF85F0; --c-other:#9AA5B2;
   color-scheme:dark}}
 
@@ -136,6 +136,27 @@ main .wrap{display:flex;flex-direction:column;gap:12px;padding-block:4px 16px}
 .field span{font-size:13px;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .note{font-size:13px;color:var(--muted);margin:0}
+/* food search */
+.mealform{display:flex;flex-direction:column;gap:8px}
+.sugwrap{position:relative}
+.sug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:4;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:300px;overflow-y:auto}
+.sug button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:9px 12px}
+.sug button:first-child{border-top:0}
+.sug button:hover,.sug button:focus-visible{background:var(--sunk)}
+.sug small{color:var(--muted);font-size:12px}
+.pickinfo{display:flex;align-items:center;gap:8px;background:var(--sunk);border-radius:12px;padding:6px 6px 6px 12px;font-size:13px;color:var(--muted)}
+.pickinfo span{flex:1;min-width:0}
+.chip.sel{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.calc{font-weight:600;text-align:right}
+/* body */
+.bmi{display:flex;flex-direction:column;gap:6px}
+.bmiscale{position:relative;display:flex;height:8px;border-radius:99px;overflow:visible}
+.bmiscale i{height:100%;opacity:.55}
+.bmiscale i:first-child{border-radius:99px 0 0 99px}.bmiscale i:nth-child(4){border-radius:0 99px 99px 0}
+.bmiscale b{position:absolute;top:-4px;width:4px;height:16px;margin-left:-2px;border-radius:2px;background:var(--ink)}
+.bmilab{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.alert{margin:0;font-size:13.5px;background:var(--sunk);border-radius:12px;padding:10px 12px;color:var(--ink)}
+.alert::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-right:8px;vertical-align:1px}
 .alt summary{cursor:pointer;color:var(--muted);font-size:13.5px;padding:4px 0}
 .emailform{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .who{display:flex;align-items:center;gap:10px;min-width:0}
@@ -191,7 +212,370 @@ const CATS=[
   {id:'fuel',name:'Топливо',c:'var(--c-fuel)'},
   {id:'market',name:'Маркетплейсы',c:'var(--c-market)'},
   {id:'other',name:'Другое',c:'var(--c-other)'}];
-const DEF={kcalGoal:2900,protGoal:130,waterGoal:2500,glass:250,sleepGoal:8,piggyStart:0,piggyGoal:100000,habits:['Тренировка','Витамины / креатин']};
+const DEF={kcalGoal:2900,protGoal:130,waterGoal:2500,glass:250,sleepGoal:8,piggyStart:0,piggyGoal:100000,habits:['Тренировка','Витамины / креатин'],
+  height:0,weightGoal:0,stepsGoal:10000,waterFrom:8,waterTo:22,customFoods:[]};
+
+/* Food base: name | kcal per 100 g | protein per 100 g | usual portion, g | portion name.
+   Typical values from Russian nutrition tables; real dishes vary by recipe. */
+const FOOD_RAW=`Хлеб белый|265|8|30|ломтик
+Хлеб ржаной (чёрный)|210|6.6|30|ломтик
+Хлеб Бородинский|208|6.8|30|ломтик
+Батон нарезной|262|7.5|30|ломтик
+Хлеб цельнозерновой|245|9|30|ломтик
+Лаваш тонкий|275|9|60|1 лист
+Хлебцы|360|11|10|1 шт
+Сушки|335|11|10|1 шт
+Гренки|340|10|30|горсть
+Булочка с маком|336|7.6|80|1 шт
+Булочка сдобная|339|7.9|80|1 шт
+Булочка с корицей|360|6|100|1 шт
+Плюшка московская|390|8|90|1 шт
+Круассан|406|8|60|1 шт
+Круассан с шоколадом|420|7|70|1 шт
+Слойка с вишней|360|5|80|1 шт
+Слойка с ветчиной и сыром|330|10|100|1 шт
+Пирожок печёный с капустой|235|6|70|1 шт
+Пирожок печёный с картошкой|230|5.5|70|1 шт
+Пирожок печёный с мясом|260|10|80|1 шт
+Пирожок жареный с мясом|290|10|90|1 шт
+Пирожок жареный с картошкой|260|5|80|1 шт
+Беляш|300|11|120|1 шт
+Чебурек|290|9|130|1 шт
+Самса с мясом|320|11|130|1 шт
+Хачапури по-аджарски|300|12|300|1 шт
+Хачапури по-имеретински|290|12|150|кусок
+Пицца Маргарита|250|11|120|1 кусок
+Пицца Пепперони|285|12|120|1 кусок
+Пицца с курицей и грибами|240|11|120|1 кусок
+Пицца Четыре сыра|290|13|120|1 кусок
+Блины|230|6|50|1 шт
+Блины с мясом|240|11|90|1 шт
+Блины с творогом|210|9|90|1 шт
+Блины с ветчиной и сыром|250|12|100|1 шт
+Оладьи|250|6|40|1 шт
+Сырники|220|13|60|1 шт
+Ватрушка с творогом|290|9|90|1 шт
+Пончик|300|5|60|1 шт
+Пончик в глазури|400|5|70|1 шт
+Пряник|350|5|40|1 шт
+Печенье овсяное|440|6|15|1 шт
+Печенье сахарное|420|7|10|1 шт
+Крекер|440|10|10|1 шт
+Гречка варёная|110|4.2|200|тарелка
+Гречка сухая|330|12.6|80|порция
+Рис белый варёный|130|2.7|200|тарелка
+Рис сухой|340|7|80|порция
+Рис бурый варёный|112|2.6|200|тарелка
+Овсянка на воде|88|3|250|тарелка
+Овсянка на молоке|120|4|250|тарелка
+Овсяные хлопья сухие|370|12|50|порция
+Каша рисовая молочная|100|3|250|тарелка
+Манная каша на молоке|100|3|250|тарелка
+Пшённая каша|110|3.5|200|тарелка
+Перловка варёная|120|3|200|тарелка
+Булгур варёный|83|3|200|тарелка
+Кускус варёный|112|3.8|200|тарелка
+Киноа варёная|120|4.4|200|тарелка
+Макароны варёные|140|5|200|тарелка
+Макароны сухие|350|12|80|порция
+Спагетти варёные|150|5.5|200|тарелка
+Лапша быстрого приготовления|450|9|60|пачка (сухая)
+Мюсли|360|9|50|порция
+Гранола|450|10|50|порция
+Хлопья кукурузные|370|7|40|порция
+Картофельное пюре|90|2|200|тарелка
+Картофель варёный|82|2|200|порция
+Картофель жареный|190|3|200|порция
+Картофель запечённый|95|2.5|200|порция
+Картофель по-деревенски|170|3|150|порция
+Картофель фри|312|3.4|110|средняя порция
+Драники|220|4|100|2 шт
+Макароны по-флотски|200|9|300|тарелка
+Паста карбонара|260|10|300|тарелка
+Паста болоньезе|170|8|300|тарелка
+Лазанья|170|9|300|порция
+Ризотто|150|4|300|тарелка
+Плов с курицей|160|8|300|тарелка
+Плов со свининой|210|7|300|тарелка
+Плов с говядиной|190|8|300|тарелка
+Гречка с мясом|160|9|300|тарелка
+Гречка с курицей|130|11|300|тарелка
+Курица с рисом|150|11|300|тарелка
+Жаркое с картошкой и мясом|140|8|300|тарелка
+Куриная грудка варёная|137|29|150|порция
+Куриная грудка жареная|165|30|150|порция
+Куриная грудка запечённая|150|30|150|порция
+Куриное бедро запечённое|210|23|150|порция
+Куриные крылья запечённые|260|22|150|порция
+Куриные голени|190|24|150|порция
+Курица гриль|210|22|200|порция
+Курица в панировке (жареная)|270|19|120|1 кусок
+Куриное филе в кляре|260|17|150|порция
+Куриные наггетсы|290|15|100|6 шт
+Котлета куриная|190|17|100|1 шт
+Котлета из индейки|160|18|100|1 шт
+Котлета домашняя|260|15|100|1 шт
+Котлета по-киевски|330|15|150|1 шт
+Тефтели в соусе|170|9|150|порция
+Фрикадельки|200|13|100|порция
+Зразы мясные|220|13|120|1 шт
+Говядина варёная|250|25|150|порция
+Говядина тушёная|230|17|150|порция
+Стейк говяжий|250|26|200|1 шт
+Гуляш из говядины|150|14|200|порция
+Бефстроганов|200|15|200|порция
+Свинина жареная|280|19|150|порция
+Свинина запечённая|260|21|150|порция
+Отбивная свиная|290|20|150|1 шт
+Шашлык из свинины|300|20|200|порция
+Шашлык из курицы|190|22|200|порция
+Шашлык из баранины|280|17|200|порция
+Индейка филе запечённое|140|29|150|порция
+Фарш говяжий жареный|250|23|100|порция
+Печень говяжья жареная|200|23|100|порция
+Печень куриная тушёная|165|21|100|порция
+Сердечки куриные тушёные|160|16|100|порция
+Сосиски|260|11|50|1 шт
+Сардельки|250|10|100|1 шт
+Колбаса варёная (докторская)|257|13|40|2 ломтика
+Колбаса копчёная (сервелат)|460|24|30|4 ломтика
+Ветчина|270|14|40|2 ломтика
+Бекон жареный|500|14|20|2 полоски
+Сало|800|2.4|20|кусочек
+Пельмени|275|12|250|порция
+Вареники с картошкой|150|4|200|порция
+Вареники с творогом|200|10|200|порция
+Вареники с вишней|190|5|200|порция
+Манты|220|10|200|3 шт
+Хинкали|230|10|200|3 шт
+Голубцы|120|7|250|2 шт
+Перец фаршированный|130|7|250|1 шт
+Долма|170|7|200|порция
+Лобио|120|7|200|порция
+Лосось запечённый|200|22|150|порция
+Сёмга слабосолёная|200|21|50|порция
+Горбуша запечённая|150|22|150|порция
+Треска запечённая|90|20|150|порция
+Минтай запечённый|80|17|150|порция
+Хек жареный|160|17|150|порция
+Тунец консервированный в собственном соку|100|23|100|порция
+Скумбрия копчёная|220|20|100|порция
+Скумбрия запечённая|190|19|150|порция
+Сельдь солёная|220|18|60|порция
+Шпроты|360|17|50|порция
+Рыбные котлеты|170|13|100|1 шт
+Рыба в кляре|230|14|150|порция
+Креветки варёные|95|20|100|порция
+Кальмар варёный|110|18|100|порция
+Крабовые палочки|90|6|100|порция
+Икра красная|250|30|20|ложка
+Яйцо куриное варёное|155|12.7|55|1 шт
+Яичница|200|13|110|из 2 яиц
+Яичница с беконом|260|14|150|порция
+Омлет|180|10|150|порция
+Омлет с сыром|230|14|170|порция
+Молоко 2,5%|52|2.9|250|стакан
+Молоко 3,2%|60|2.9|250|стакан
+Кефир 1%|40|3|250|стакан
+Кефир 2,5%|53|3|250|стакан
+Ряженка 4%|76|2.9|250|стакан
+Айран / тан|25|1.1|500|бутылка
+Йогурт питьевой|75|3|250|стакан
+Йогурт греческий 2%|70|10|150|баночка
+Йогурт фруктовый|95|3|125|баночка
+Творог 0%|70|16.5|180|пачка
+Творог 5%|121|17|180|пачка
+Творог 9%|160|16|180|пачка
+Творожная масса с изюмом|340|7|100|порция
+Сырок глазированный|410|8|45|1 шт
+Запеканка творожная|180|14|150|порция
+Сметана 15%|160|2.6|20|ложка
+Сметана 20%|200|2.5|20|ложка
+Сыр твёрдый (российский)|360|23|30|2 ломтика
+Сыр плавленый|260|12|20|ломтик
+Сыр моцарелла|250|18|50|порция
+Сыр фета|260|14|50|порция
+Сыр адыгейский|240|18|50|порция
+Масло сливочное|748|0.5|10|на бутерброд
+Сливки 10%|118|3|20|в кофе
+Молочный коктейль|110|3|300|стакан
+Мороженое пломбир|230|3.5|80|стаканчик
+Мороженое эскимо|300|3.5|70|1 шт
+Борщ|50|2|300|тарелка
+Борщ со сметаной|65|2.2|330|тарелка
+Щи из свежей капусты|40|1.5|300|тарелка
+Солянка мясная|70|5|300|тарелка
+Куриный суп с лапшой|50|3.5|300|тарелка
+Гороховый суп|65|4|300|тарелка
+Рассольник|45|1.5|300|тарелка
+Уха|45|4|300|тарелка
+Суп грибной|40|1.5|300|тарелка
+Суп-пюре тыквенный|60|1.5|300|тарелка
+Сырный суп|70|3|300|тарелка
+Окрошка на кефире|55|3|350|тарелка
+Окрошка на квасе|60|2.5|350|тарелка
+Харчо|75|4|300|тарелка
+Лагман|100|6|400|тарелка
+Рамен|90|5|450|тарелка
+Оливье|190|5|200|порция
+Винегрет|80|1.5|200|порция
+Селёдка под шубой|190|5|200|порция
+Цезарь с курицей|190|11|250|порция
+Греческий салат|120|3|200|порция
+Салат из огурцов и помидоров|20|1|200|порция
+Салат овощной с маслом|90|1|200|порция
+Салат овощной со сметаной|70|1.3|200|порция
+Салат с крабовыми палочками|200|5|200|порция
+Мимоза|210|8|200|порция
+Салат из капусты|60|1.4|150|порция
+Морковь по-корейски|130|1|100|порция
+Огурец|15|0.8|120|1 шт
+Помидор|20|1|120|1 шт
+Помидоры черри|20|1|100|горсть
+Капуста белокочанная|27|1.8|100|порция
+Брокколи варёная|35|2.8|150|порция
+Цветная капуста варёная|30|2|150|порция
+Морковь|35|1.3|80|1 шт
+Перец болгарский|26|1.3|150|1 шт
+Кабачок тушёный|40|0.7|200|порция
+Баклажаны жареные|110|1|150|порция
+Авокадо|160|2|100|половинка
+Кукуруза консервированная|60|2|100|порция
+Горошек зелёный консервированный|55|3.6|100|порция
+Фасоль консервированная|95|6.7|150|порция
+Нут варёный|165|9|150|порция
+Чечевица варёная|115|9|200|порция
+Грибы жареные|150|3.5|150|порция
+Овощи гриль|60|1.5|200|порция
+Овощное рагу|80|2|250|порция
+Квашеная капуста|23|1|100|порция
+Огурцы солёные|12|0.8|100|2 шт
+Лук репчатый|41|1.4|50|половинка
+Яблоко|47|0.4|180|1 шт
+Банан|96|1.5|120|1 шт
+Апельсин|43|0.9|180|1 шт
+Мандарин|38|0.8|80|1 шт
+Груша|47|0.4|170|1 шт
+Виноград|72|0.6|150|кисть
+Киви|47|0.8|80|1 шт
+Персик|45|0.9|150|1 шт
+Нектарин|44|1|150|1 шт
+Абрикос|44|0.9|40|1 шт
+Слива|43|0.8|30|1 шт
+Хурма|67|0.5|200|1 шт
+Гранат|72|0.7|200|1 шт
+Грейпфрут|35|0.7|300|1 шт
+Ананас|52|0.3|150|порция
+Манго|60|0.8|200|порция
+Арбуз|27|0.6|300|ломоть
+Дыня|35|0.6|300|ломоть
+Клубника|33|0.8|150|стакан
+Черника|44|1|100|горсть
+Малина|46|0.8|100|горсть
+Вишня|52|0.8|100|горсть
+Курага|240|5|50|горсть
+Изюм|265|2.9|40|горсть
+Финики|280|2.5|40|5 шт
+Чернослив|240|2.3|40|5 шт
+Грецкие орехи|654|15|30|горсть
+Миндаль|610|19|30|горсть
+Кешью|600|18|30|горсть
+Фундук|650|15|30|горсть
+Арахис|560|26|30|горсть
+Семечки подсолнечные|580|21|30|горсть
+Арахисовая паста|600|25|20|ложка
+Шоколад молочный|540|7|25|4 дольки
+Шоколад горький|550|7|25|4 дольки
+Сникерс|490|8|50|1 батончик
+Марс|450|4|50|1 батончик
+Твикс|495|5|55|1 батончик
+Баунти|490|4|57|1 батончик
+Киндер шоколад|560|9|12.5|1 батончик
+Конфета шоколадная|520|5|15|1 шт
+Мармелад|320|0.5|30|порция
+Зефир|320|0.8|35|1 шт
+Пастила|310|0.5|30|порция
+Халва|520|12|30|порция
+Вафли|530|5|30|2 шт
+Торт Наполеон|400|6|120|кусок
+Торт Медовик|430|6|120|кусок
+Чизкейк|320|6|120|кусок
+Тирамису|300|5|120|порция
+Эклер|330|5|70|1 шт
+Маффин|380|6|90|1 шт
+Брауни|440|5|60|кусок
+Сгущёнка|320|7|20|ложка
+Варенье|260|0.5|20|ложка
+Мёд|320|0.8|15|ложка
+Сахар|398|0|5|чайная ложка
+Нутелла|540|6|20|ложка
+Чипсы|540|6|50|маленькая пачка
+Сухарики|400|11|40|пачка
+Попкорн сладкий|400|5|50|порция
+Гамбургер|250|13|110|1 шт
+Чизбургер|260|14|120|1 шт
+Двойной чизбургер|270|16|170|1 шт
+Биг Мак|240|11|210|1 шт
+Чикенбургер|250|10|130|1 шт
+Шаурма с курицей|200|10|350|1 шт
+Шаурма со свининой|230|10|350|1 шт
+Хот-дог|260|10|150|1 шт
+Стрипсы куриные|270|17|120|порция
+Ролл-твистер|230|10|200|1 шт
+Буррито|210|9|250|1 шт
+Кесадилья|260|12|200|1 шт
+Роллы Филадельфия|180|7|240|8 шт
+Роллы Калифорния|150|5|240|8 шт
+Роллы запечённые|220|8|240|8 шт
+Суши нигири|150|6|70|2 шт
+Бутерброд с колбасой|270|10|70|1 шт
+Бутерброд с сыром|310|12|60|1 шт
+Бутерброд с маслом|370|6|40|1 шт
+Сэндвич с курицей|220|12|200|1 шт
+Кофе чёрный без сахара|2|0.2|200|чашка
+Капучино|45|2.5|300|стакан
+Латте|50|2.6|350|стакан
+Раф кофе|110|2|350|стакан
+Чай с сахаром|16|0|250|чашка
+Какао на молоке|80|3.3|250|чашка
+Сок апельсиновый|45|0.7|250|стакан
+Сок яблочный|46|0.5|250|стакан
+Кока-кола|42|0|330|банка
+Кола без сахара|0|0|330|банка
+Энергетик|45|0|450|банка
+Квас|27|0.2|500|бутылка
+Компот|60|0.3|250|стакан
+Морс|40|0.1|250|стакан
+Смузи фруктовый|60|0.8|300|стакан
+Пиво светлое|43|0.5|500|бутылка
+Вино красное сухое|68|0.1|150|бокал
+Протеин сывороточный (порошок)|375|75|30|мерная ложка
+Гейнер (порошок)|380|20|100|порция
+Протеиновый батончик|350|30|60|1 шт
+Масло подсолнечное|899|0|10|столовая ложка
+Масло оливковое|898|0|10|столовая ложка
+Майонез|630|1|15|ложка
+Кетчуп|100|1.6|15|ложка
+Соус сырный|250|4|30|порция
+Соевый соус|55|6|15|ложка`;
+const FOODS=FOOD_RAW.trim().split('\n').map(l=>{const [n,k,p,g,u]=l.split('|');return {n,k:+k,p:+p,g:+g,u}});
+const norm=s=>String(s||'').toLowerCase().replace(/ё/g,'е');
+function findFoods(q){
+  q=norm(q).trim();if(q.length<2)return [];
+  const words=q.split(/\s+/);
+  const pool=[...(S.customFoods||[]).map(c=>({n:c.n,k:num(c.k),p:num(c.p),custom:true})),...FOODS];
+  const res=[];
+  pool.forEach((f,idx)=>{
+    const nn=norm(f.n);if(!words.every(w=>nn.includes(w)))return;
+    const score=(nn.startsWith(q)?0:nn.split(/[\s(,\-/]+/).some(w=>w.startsWith(words[0]))?1:2)-(f.custom?0.5:0);
+    res.push({f,score,idx});
+  });
+  // ties keep the base order, where the everyday cooked variant comes first
+  return res.sort((a,b)=>a.score-b.score||a.idx-b.idx).slice(0,8).map(r=>r.f);
+}
+const knownFood=name=>FOODS.some(f=>norm(f.n)===norm(name))||(S.customFoods||[]).some(f=>norm(f.n)===norm(name));
+let pick=null, lastSug=[];
+function calcPick(){return pick.custom?{kcal:pick.k*pick.q,prot:pick.p*pick.q}:{kcal:pick.k*pick.q/100,prot:pick.p*pick.q/100}}
 const LS='moy-den-v1';
 
 let S=structuredClone(DEF), days={}, cur=todayKey(), tab='day', range=7, lastCat='food';
@@ -209,7 +593,7 @@ function key(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'
 function parse(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d)}
 function shift(k,n){const d=parse(k);d.setDate(d.getDate()+n);return key(d)}
 function todayKey(){return key(new Date())}
-const blank=()=>({sleep:null,bed:'',wake:'',water:0,meals:[],spend:[],piggy:[],tasks:[],habits:{}});
+const blank=()=>({sleep:null,bed:'',wake:'',water:0,meals:[],spend:[],piggy:[],tasks:[],habits:{},weight:null,steps:null});
 const day=k=>Object.assign(blank(),days[k]||{});
 const sum=(a,f)=>a.reduce((s,x)=>s+(f?f(x):x),0);
 const kcal=d=>sum(d.meals,m=>num(m.kcal));
@@ -407,6 +791,66 @@ function recentMeals(){
   return [...seen.values()].slice(0,8);
 }
 
+/* ---------- food form ---------- */
+function mealForm(){
+  const name=`<div class="sugwrap"><input class="inp" id="m-name" placeholder="Что съел, например «гречка»" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="m-sug" value="${pick?esc(pick.n):''}"><div class="sug" id="m-sug" role="listbox" hidden></div></div>`;
+  if(!pick)return `<form data-form="meal" class="mealform">${name}
+    <div class="row"><input class="inp grow" id="m-kcal" inputmode="numeric" placeholder="ккал"><input class="inp grow" id="m-prot" inputmode="numeric" placeholder="белок, г"><button class="btn">Добавить</button></div>
+    <p class="note">Начните вводить название и выберите блюдо из списка. Если его там нет, впишите калории сами, и приложение запомнит блюдо.</p></form>`;
+  const c=calcPick(), mults=[0.5,1,1.5,2];
+  const info=pick.custom?`Моё блюдо: ${fmt(pick.k)} ккал и ${fmt(pick.p)} г белка за порцию`:`${fmt(pick.k)} ккал и ${fmt(pick.p)} г белка на 100 г · ${esc(pick.u)} ≈ ${fmt(pick.g)} г`;
+  const qv=m=>pick.custom?m:Math.round(pick.g*m);
+  return `<form data-form="meal" class="mealform">${name}
+    <div class="pickinfo"><span>${info}</span><button type="button" class="x" data-act="unpick" aria-label="Сбросить выбор">×</button></div>
+    <div class="chips">${mults.map(m=>`<button type="button" class="chip ${num(pick.q)===qv(m)?'sel':''}" data-act="qty" data-v="${qv(m)}">${m===1?(pick.custom?'1 порция':esc(pick.u)):(m===0.5?'½':m===1.5?'1½':'×2')}</button>`).join('')}</div>
+    <div class="row">
+      <input class="inp" id="m-q" inputmode="decimal" value="${pick.q}" style="width:96px" aria-label="${pick.custom?'Порций':'Граммов'}"><span>${pick.custom?'порц.':'г'}</span>
+      <span class="calc grow num" id="m-calc">= ${fmt(c.kcal)} ккал · ${fmt(c.prot)} г белка</span>
+    </div>
+    <button class="btn">Добавить</button></form>`;
+}
+function showSug(){
+  const inp=$('#m-name'),box=$('#m-sug');if(!inp||!box)return;
+  lastSug=findFoods(inp.value);
+  if(!lastSug.length||document.activeElement!==inp){box.hidden=true;return}
+  box.innerHTML=lastSug.map((f,i)=>`<button type="button" role="option" data-act="pickfood" data-i="${i}"><span>${esc(f.n)}${f.custom?' <span class="tag">моё</span>':''}</span><small class="num">${f.custom?fmt(f.k)+' ккал/порция':fmt(f.k)+' ккал/100 г · '+esc(f.u)}</small></button>`).join('');
+  box.hidden=false;
+}
+
+/* ---------- body ---------- */
+function lastWeight(k){
+  let best=null;
+  for(const x in days){if(isDayKey(x)&&x<=k&&num(days[x].weight)>0&&(!best||x>best))best=x}
+  return best?{k:best,w:num(days[best].weight)}:null;
+}
+function bmiInfo(b){
+  if(b<18.5)return {t:'недостаток веса',c:'var(--warn)'};
+  if(b<25)return {t:'норма',c:'var(--ok)'};
+  if(b<30)return {t:'избыточный вес',c:'var(--warn)'};
+  return {t:'ожирение',c:'var(--danger)'};
+}
+function bodyCard(d){
+  const lw=lastWeight(cur), prev=lw?lastWeight(shift(lw.k,-1)):null, h=num(S.height)/100;
+  const bmi=lw&&h>0?lw.w/(h*h):0, bi=bmi?bmiInfo(bmi):null, steps=num(d.steps);
+  const mark=bmi?Math.max(0,Math.min(100,(bmi-15)/20*100)):0;
+  const diff=lw&&prev?lw.w-prev.w:0;
+  return `<section class="card" id="sec-body">
+    <h2><span class="sw" style="background:var(--mass)"></span>Тело и шаги</h2>
+    <div class="grid2">
+      <label class="field"><span>Вес${cur===todayKey()?' сегодня':''}, кг</span><input class="inp num" id="w-in" data-day="weight" inputmode="decimal" placeholder="${lw?fmt(lw.w):'например, 70'}" value="${d.weight!=null&&d.weight!==''?esc(String(d.weight).replace('.',',')):''}"></label>
+      <label class="field"><span>Шаги</span><input class="inp num" id="st-in" data-day="steps" inputmode="numeric" placeholder="0" value="${d.steps!=null&&d.steps!==''?esc(d.steps):''}"></label>
+    </div>
+    ${lw?`<p class="note">Последний вес: <b class="num" style="color:var(--ink)">${fmt(lw.w)} кг</b>${lw.k!==cur?' ('+dateLabel(lw.k).toLowerCase()+')':''}${diff?` · <span class="${diff>0?'up':'down'}">${diff>0?'+':'−'}${fmt(Math.abs(diff))} кг</span> к прошлому замеру`:''}${num(S.weightGoal)>0?` · до цели ${fmt(Math.abs(S.weightGoal-lw.w))} кг`:''}</p>`:''}
+    ${bmi?`<div class="bmi"><div class="row" style="justify-content:space-between"><span>ИМТ <b class="num">${fmt(bmi)}</b></span><span style="color:${bi.c};font-weight:600">${bi.t}</span></div>
+      <div class="bmiscale" aria-hidden="true"><i style="flex:3.5;background:var(--warn)"></i><i style="flex:6.5;background:var(--ok)"></i><i style="flex:5;background:var(--warn)"></i><i style="flex:5;background:var(--danger)"></i><b style="left:${mark}%"></b></div>
+      <div class="bmilab num"><span>15</span><span>18,5</span><span>25</span><span>30</span><span>35</span></div></div>`
+      :lw?`<p class="note">Чтобы посчитать индекс массы тела, укажите рост во вкладке «Настройки».</p>`:''}
+    <div class="row" style="justify-content:space-between;font-size:13.5px;color:var(--muted)"><span>Шаги: <b class="num" style="color:var(--ink)">${fmt(steps)}</b> / ${fmt(S.stepsGoal)}</span><span>${steps>=S.stepsGoal?'Цель выполнена':''}</span></div>
+    ${bar(pct(steps,S.stepsGoal),'var(--mass)')}
+    ${!steps?'<p class="note">Шаги перепишите из Google Fit или Samsung Health: приложение из браузера не может читать шагомер телефона.</p>':''}
+  </section>`;
+}
+
 /* ---------- day view ---------- */
 function viewDay(){
   const d=day(cur), kc=kcal(d), pr=prot(d), sp=spent(d), pd=piggyDelta(d), bal=piggyBalance();
@@ -416,6 +860,14 @@ function viewDay(){
   const y=day(shift(cur,-1)), carry=y.tasks.filter(t=>!t.done&&!d.tasks.some(x=>x.text===t.text));
   const byCat=CATS.map(c=>({...c,v:sum(d.spend.filter(s=>s.cat===c.id),s=>num(s.amount))})).filter(c=>c.v>0);
   const left=Math.ceil((S.waterGoal-d.water)/S.glass);
+  const lw=lastWeight(cur);
+  // Water pace: how much should be drunk by now if spread evenly over the waking day
+  let pace='';
+  if(cur===todayKey()&&d.water<S.waterGoal){
+    const now=new Date(),h=now.getHours()+now.getMinutes()/60,from=num(S.waterFrom),to=num(S.waterTo);
+    const exp=Math.round(S.waterGoal*Math.max(0,Math.min(1,(h-from)/Math.max(1,to-from)))/50)*50;
+    if(exp-d.water>=S.glass){const n=Math.ceil((exp-d.water)/S.glass);pace=`<p class="alert">По графику к ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} нужно было выпить около ${fmt(exp)} мл. Выпейте ${n} ${plural(n,'стакан','стакана','стаканов')}, чтобы догнать.</p>`}
+  }
 
   return `
   ${authReady&&!me&&window.__fb?`<section class="card signin"><h2>Сохранять в облаке</h2><p class="note">Войдите через Google один раз. Данные не пропадут, если сменить или потерять телефон, и будут видны с компьютера.</p>${signinBlock()}</section>`:''}
@@ -427,6 +879,11 @@ function viewDay(){
   <div class="money">
     <button class="tile" data-go="sec-spend"><span class="l">Траты</span><span class="v num">${rub(sp)}</span><span class="s">${d.spend.length?d.spend.length+' '+plural(d.spend.length,'покупка','покупки','покупок'):'пока ничего'}</span></button>
     <button class="tile" data-go="sec-piggy"><span class="l">Копилка</span><span class="v num">${rub(bal)}</span><span class="s ${pd>0?'up':pd<0?'down':''}">${pd?signed(pd)+' за день':'за день без изменений'}</span></button>
+  </div>
+
+  <div class="money">
+    <button class="tile" data-go="sec-body"><span class="l">Вес</span><span class="v num">${lw?fmt(lw.w)+' кг':'—'}</span><span class="s">${lw&&num(S.height)>0?'ИМТ '+fmt(lw.w/Math.pow(num(S.height)/100,2)):lw?'укажите рост':'впишите вес'}</span></button>
+    <button class="tile" data-go="sec-body"><span class="l">Шаги</span><span class="v num">${fmt(num(d.steps))}</span><span class="s">из ${fmt(S.stepsGoal)}</span></button>
   </div>
 
   <section class="card" id="sec-sleep">
@@ -452,6 +909,7 @@ function viewDay(){
       <button class="btn ghost" data-act="water" data-v="${-S.glass}" aria-label="Убрать стакан">−</button>
     </div>
     <p class="note">${d.water>=S.waterGoal?'Норма на сегодня выполнена.':'Осталось '+fmt(S.waterGoal-d.water)+' мл, примерно '+left+' '+plural(left,'стакан','стакана','стаканов')+'.'}</p>
+    ${pace}
   </section>
 
   <section class="card" id="sec-food">
@@ -462,14 +920,11 @@ function viewDay(){
       <span>${kc>=S.kcalGoal?'Норма набрана':'Добрать '+fmt(S.kcalGoal-kc)+' ккал'}</span>
     </div>
     <div class="list">${d.meals.length?d.meals.map((m,i)=>`<div class="li"><span class="t">${esc(m.name)||'Без названия'}${num(m.prot)?`<small>белок ${fmt(num(m.prot))} г</small>`:''}</span><span class="a num">${fmt(num(m.kcal))} ккал</span><button class="x" data-act="meal-del" data-i="${i}" aria-label="Удалить">×</button></div>`).join(''):'<p class="empty">Добавьте первый приём пищи: название и калории.</p>'}</div>
-    <form data-form="meal" class="row">
-      <input class="inp grow" id="m-name" placeholder="Что съел" autocomplete="off" style="flex-basis:100%">
-      <input class="inp grow" id="m-kcal" inputmode="numeric" placeholder="ккал">
-      <input class="inp grow" id="m-prot" inputmode="numeric" placeholder="белок, г">
-      <button class="btn">Добавить</button>
-    </form>
+    ${mealForm()}
     ${recent.length?`<div class="chips">${recent.map((m,i)=>`<button class="chip" data-act="meal-quick" data-i="${i}">${esc(m.name)} · ${fmt(num(m.kcal))}</button>`).join('')}</div>`:''}
   </section>
+
+  ${bodyCard(d)}
 
   <section class="card" id="sec-spend">
     <h2><span class="sw" style="background:var(--c-transfer)"></span>Траты<span class="hv num">${rub(sp)}</span></h2>
@@ -530,6 +985,22 @@ function chart(vals,labels,goal,color,fmtv){
   if(goal)s+=`<line x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}" stroke="var(--ink)" stroke-dasharray="4 4" opacity=".5"/>`;
   return s+'</svg>';
 }
+function lineChart(vals,labels,color){
+  const pts=vals.map((v,i)=>v==null?null:{i,v}).filter(Boolean);
+  if(!pts.length)return '<p class="empty">За этот период вес не записан. Впишите его в карточке «Тело и шаги».</p>';
+  const W=320,H=130,top=16,bot=18,padL=30,padR=10,n=vals.length;
+  let mn=Math.min(...pts.map(p=>p.v)),mx=Math.max(...pts.map(p=>p.v));
+  if(mx-mn<1){const c=(mx+mn)/2;mn=c-0.5;mx=c+0.5}
+  const x=i=>padL+(W-padL-padR)*(n===1?0.5:i/(n-1)), y=v=>top+(H-top-bot)*(1-(v-mn)/(mx-mn));
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for(const g of [mn,mx])s+=`<line x1="${padL}" x2="${W-padR}" y1="${y(g)}" y2="${y(g)}" stroke="var(--line)"/><text x="${padL-4}" y="${y(g)+3}" text-anchor="end">${fmt(g)}</text>`;
+  labels.forEach((l,i)=>{if(n<=10||i%5===0||i===n-1)s+=`<text x="${x(i)}" y="${H-5}" text-anchor="middle">${l}</text>`});
+  s+=`<path d="${pts.map((p,j)=>(j?'L':'M')+x(p.i).toFixed(1)+' '+y(p.v).toFixed(1)).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+  pts.forEach((p,j)=>{const last=j===pts.length-1;s+=`<circle cx="${x(p.i)}" cy="${y(p.v)}" r="${last?4.5:3}" fill="${last?color:'var(--surface)'}" stroke="${color}" stroke-width="2"/>`});
+  const lp=pts[pts.length-1];
+  s+=`<text x="${Math.min(x(lp.i),W-padR-14)}" y="${y(lp.v)-9}" text-anchor="middle" style="fill:var(--ink);font-weight:600">${fmt(lp.v)}</text>`;
+  return s+'</svg>';
+}
 function viewStats(){
   const keys=Array.from({length:range},(_,i)=>shift(cur,i-range+1));
   const ds=keys.map(day);
@@ -538,6 +1009,8 @@ function viewStats(){
   const sleep=ds.map(d=>d.sleep||0), water=ds.map(d=>d.water), kc=ds.map(kcal), sp=ds.map(spent), pg=ds.map(piggyDelta);
   const totalSp=sum(sp), cats=CATS.map(c=>({...c,v:sum(ds,d=>sum(d.spend.filter(s=>s.cat===c.id),s=>num(s.amount)))}));
   const hitK=kc.filter(v=>v>=S.kcalGoal).length;
+  const st=ds.map(d=>num(d.steps)), wv=ds.map(d=>num(d.weight)>0?num(d.weight):null), wl=wv.filter(v=>v!=null);
+  const wHead=wl.length>1?((wl[wl.length-1]-wl[0]>=0?'+':'−')+fmt(Math.abs(wl[wl.length-1]-wl[0]))+' кг за период'):wl.length?fmt(wl[0])+' кг':'';
   const block=(title,color,head,vals,goal,f)=>`<section class="card"><h2><span class="sw" style="background:${color}"></span>${title}<span class="hv num">${head}</span></h2><div class="chart">${chart(vals,labels,goal,color,f)}</div></section>`;
   return `
   <div class="seg" role="group" aria-label="Период">
@@ -547,6 +1020,8 @@ function viewStats(){
   ${block('Сон','var(--sleep)','в среднем '+fmt(avg(sleep))+' ч',sleep,S.sleepGoal,v=>fmt(v))}
   ${block('Калории','var(--food)','в среднем '+fmt(avg(kc))+' · норма '+hitK+' '+plural(hitK,'день','дня','дней'),kc,S.kcalGoal,v=>fmt(v/1000)+'к')}
   ${block('Вода','var(--water)','в среднем '+fmt(avg(water)/1000)+' л',water,S.waterGoal,v=>fmt(v/1000))}
+  <section class="card"><h2><span class="sw" style="background:var(--mass)"></span>Вес<span class="hv num">${wHead}</span></h2><div class="chart">${lineChart(wv,labels,'var(--mass)')}</div></section>
+  ${block('Шаги','var(--mass)','в среднем '+fmt(avg(st)),st,S.stepsGoal,v=>v>=1000?fmt(v/1000)+'к':fmt(v))}
   ${block('Траты','var(--c-transfer)','всего '+rub(totalSp),sp,0,v=>v>=1000?fmt(v/1000)+'к':fmt(v))}
   <section class="card">
     <h2><span class="sw" style="background:var(--c-transfer)"></span>Траты по категориям<span class="hv">${range} дн.</span></h2>
@@ -577,9 +1052,19 @@ function viewSettings(){
     <div class="grid2">
       ${f('kcalGoal','Калории','ккал')}${f('protGoal','Белок','г')}
       ${f('waterGoal','Вода','мл')}${f('glass','Стакан','мл')}
-      ${f('sleepGoal','Сон','ч')}
+      ${f('sleepGoal','Сон','ч')}${f('stepsGoal','Шаги','')}
+      ${f('waterFrom','Пью воду с','ч')}${f('waterTo','до','ч')}
     </div>
     <p class="note">Для набора массы обычно берут свою норму поддержания плюс 300–500 ккал и 1,6–2 г белка на килограмм веса. Если вес за 2 недели не растёт, добавьте ещё 200 ккал.</p>
+  </section>
+  <section class="card">
+    <h2>Тело</h2>
+    <div class="grid2">${f('height','Рост','см')}${f('weightGoal','Желаемый вес','кг')}</div>
+    <p class="note">Рост нужен для индекса массы тела (ИМТ). Норма ИМТ — от 18,5 до 25.</p>
+  </section>
+  <section class="card">
+    <h2>Мои блюда</h2>
+    <div class="list">${(S.customFoods||[]).map((c,i)=>`<div class="li"><span class="t">${esc(c.n)}<small>${fmt(num(c.k))} ккал${num(c.p)?' · белок '+fmt(num(c.p))+' г':''} за порцию</small></span><button class="x" data-act="food-del" data-i="${i}" aria-label="Удалить">×</button></div>`).join('')||'<p class="empty">Пока пусто. Блюда, которые вы впишете вручную с калориями, появятся здесь и в поиске.</p>'}</div>
   </section>
   <section class="card">
     <h2>Копилка</h2>
@@ -606,13 +1091,14 @@ function viewSettings(){
 /* ---------- render ---------- */
 function render(){
   const view=$('#view');
-  const keep={};view.querySelectorAll('input[id]:not([type=radio])').forEach(i=>{if(i.value&&!i.dataset.set&&!i.dataset.time)keep[i.id]=i.value});
+  const keep={};view.querySelectorAll('input[id]:not([type=radio])').forEach(i=>{if(i.value&&!i.dataset.set&&!i.dataset.time&&!i.dataset.day)keep[i.id]=i.value});
   const ae=document.activeElement, aid=ae&&view.contains(ae)?ae.id:null, sel=aid&&ae.selectionStart!=null?[ae.selectionStart,ae.selectionEnd]:null, aval=aid?ae.value:null;
   $('#dlabel').textContent=tab==='settings'?'Настройки':tab==='stats'?(range===7?'Последние 7 дней':'Последние 30 дней'):dateLabel(cur);
   $('#prev').hidden=$('#next').hidden=tab==='settings';
   view.innerHTML=tab==='day'?viewDay():tab==='stats'?viewStats():viewSettings();
   for(const id in keep){const el=document.getElementById(id);if(el)el.value=keep[id]}
   if(aid){const el=document.getElementById(aid);if(el){el.focus({preventScroll:true});if(aval!=null)el.value=aval;if(sel)try{el.setSelectionRange(...sel)}catch(e){}}}
+  if(aid==='m-name')showSug();
   document.querySelectorAll('.tabs button').forEach(b=>{if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
 }
 let toastT;
@@ -642,6 +1128,10 @@ $('#view').addEventListener('click',async e=>{
   if(a==='task-del')mutate(cur,d=>d.tasks.splice(i,1));
   if(a==='carry'){const y=day(shift(cur,-1));mutate(cur,d=>y.tasks.filter(t=>!t.done&&!d.tasks.some(x=>x.text===t.text)).forEach(t=>d.tasks.push({text:t.text,done:false})))}
   if(a==='habit-del')setSettings(s=>s.habits.splice(i,1));
+  if(a==='food-del')setSettings(s=>s.customFoods.splice(i,1));
+  if(a==='pickfood'){const f=lastSug[i];if(f){pick={...f,q:f.custom?1:f.g};const inp=$('#m-name');if(inp){inp.value=f.n;inp.blur()}render()}}
+  if(a==='unpick'){pick=null;render()}
+  if(a==='qty'&&pick){pick.q=v;render()}
   if(a==='login')login();
   if(a==='logout')logout();
   if(a==='export')exportData();
@@ -653,9 +1143,20 @@ $('#view').addEventListener('submit',e=>{
   e.preventDefault();
   const f=e.target.dataset.form,val=id=>document.getElementById(id).value.trim(),clear=(...ids)=>ids.forEach(id=>document.getElementById(id).value='');
   if(f==='meal'){
+    if(pick){
+      const c=calcPick(),q=num(pick.q);
+      if(q<=0){toast('Укажите количество');return}
+      const name=pick.custom?(q===1?pick.n:pick.n+' ×'+fmt(q)):pick.n+' · '+fmt(q)+' г';
+      pick=null;clear('m-name');
+      mutate(cur,d=>d.meals.push({name,kcal:Math.round(c.kcal),prot:Math.round(c.prot*10)/10}));
+      return;
+    }
     const name=val('m-name'),kc=num(val('m-kcal')),pr=num(val('m-prot'));
     if(!kc&&!name){document.getElementById('m-name').focus();return}
-    clear('m-name','m-kcal','m-prot');mutate(cur,d=>d.meals.push({name,kcal:kc,prot:pr}));
+    if(name&&!kc){toast(findFoods(name).length?'Выберите блюдо из списка или впишите калории':'Такого блюда нет в списке. Впишите калории');return}
+    clear('m-name','m-kcal','m-prot');
+    if(name&&kc>0&&!knownFood(name)){S.customFoods=[...(S.customFoods||[]),{n:name,k:kc,p:pr}];persist('settings');toast('Запомнил «'+name+'», в следующий раз найдётся в поиске')}
+    mutate(cur,d=>d.meals.push({name,kcal:kc,prot:pr}));
   }
   if(f==='spend'){
     const amt=num(val('s-amt'));const cat=e.target.querySelector('input[name=cat]:checked')?.value||'other';
@@ -672,8 +1173,23 @@ $('#view').addEventListener('submit',e=>{
   if(f==='habit'){const t=val('h-text');if(!t||S.habits.includes(t))return;clear('h-text');setSettings(s=>s.habits.push(t))}
 });
 
+$('#view').addEventListener('input',e=>{
+  const el=e.target;
+  if(el.id==='m-name'){if(pick&&el.value!==pick.n){pick=null;render()}showSug()}
+  if(el.id==='m-q'&&pick){
+    pick.q=num(el.value);const c=calcPick(),t=$('#m-calc');
+    if(t)t.textContent='= '+fmt(c.kcal)+' ккал · '+fmt(c.prot)+' г белка';
+    document.querySelectorAll('[data-act=qty]').forEach(b=>b.classList.toggle('sel',num(b.dataset.v)===pick.q));
+  }
+});
+$('#view').addEventListener('focusin',e=>{if(e.target.id==='m-name')showSug()});
+$('#view').addEventListener('focusout',e=>{if(e.target.id==='m-name')setTimeout(()=>{const b=$('#m-sug');if(b&&document.activeElement!==$('#m-name'))b.hidden=true},150)});
+// keep the name field focused while a suggestion is tapped
+$('#view').addEventListener('pointerdown',e=>{if(e.target.closest('.sug'))e.preventDefault()});
+
 $('#view').addEventListener('change',e=>{
   const el=e.target;
+  if(el.dataset.day){const k=el.dataset.day,raw=el.value.trim(),v=raw===''?null:num(raw);if(v!=null&&v<0)return;mutate(cur,d=>{d[k]=v})}
   if(el.dataset.set){const k=el.dataset.set;const n=num(el.value);if(n<0)return;setSettings(s=>{s[k]=n});toast('Сохранено')}
   if(el.dataset.time){
     const k=el.dataset.time,v=el.value;
