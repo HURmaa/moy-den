@@ -136,6 +136,8 @@ main .wrap{display:flex;flex-direction:column;gap:12px;padding-block:4px 16px}
 .field span{font-size:13px;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .note{font-size:13px;color:var(--muted);margin:0}
+.alt summary{cursor:pointer;color:var(--muted);font-size:13.5px;padding:4px 0}
+.emailform{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .who{display:flex;align-items:center;gap:10px;min-width:0}
 .who img{width:36px;height:36px;border-radius:50%;flex:none}
 .who div{min-width:0;overflow-wrap:anywhere}
@@ -260,7 +262,7 @@ async function initFirebase(){
     store=F.initializeFirestore(app,{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})});
     window.__fb={U,F,auth};
     U.onAuthStateChanged(auth,user=>{authReady=true;if(user)attach(user,F,store);else detach();render()});
-    U.getRedirectResult(auth).catch(()=>{});
+    U.getRedirectResult(auth).catch(e=>toast('Не удалось войти: '+authErr(e)));
   }catch(e){console.warn('Firebase не загрузился',e);authReady=true;setSync('local');render()}
 }
 
@@ -294,16 +296,61 @@ function attach(user,F,store){
 }
 function detach(keepMe){unsubs.forEach(u=>u());unsubs=[];fs=null;if(!keepMe){me=null;setSync('local')}}
 
+function authErr(e){
+  const c=(e&&e.code)||'';
+  return {
+    'auth/unauthorized-domain':'домен hurmaa.github.io не добавлен в Firebase (Authentication → Settings → Authorized domains)',
+    'auth/operation-not-allowed':'этот способ входа не включён в Firebase (Authentication → Sign-in method)',
+    'auth/network-request-failed':'нет связи с сервером, проверьте интернет',
+    'auth/invalid-credential':'неверная почта или пароль',
+    'auth/wrong-password':'неверная почта или пароль',
+    'auth/user-not-found':'такого аккаунта нет, нажмите «Создать аккаунт»',
+    'auth/email-already-in-use':'аккаунт с этой почтой уже есть, нажмите «Войти»',
+    'auth/weak-password':'пароль должен быть не короче 6 символов',
+    'auth/invalid-email':'почта введена с ошибкой',
+    'auth/too-many-requests':'слишком много попыток, подождите пару минут'}[c]||c||(e&&e.message)||'неизвестная ошибка';
+}
+const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+function fbReady(){
+  if(!window.__fb){toast('Облако не загрузилось. Проверьте интернет и перезапустите приложение');return false}
+  if(!navigator.onLine){toast('Для входа нужен интернет');return false}
+  return true;
+}
 async function login(){
-  if(!window.__fb){toast('Облако не загрузилось. Проверьте интернет и перезапустите приложение');return}
-  if(!navigator.onLine){toast('Для входа нужен интернет');return}
+  if(!fbReady())return;
   const {U,auth}=window.__fb,prov=new U.GoogleAuthProvider();
-  try{await U.signInWithPopup(auth,prov)}
-  catch(e){
-    if(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment'){await U.signInWithRedirect(auth,prov);return}
+  prov.setCustomParameters({prompt:'select_account'});
+  toast('Открываю вход через Google…');
+  try{
+    // An installed app cannot talk to a popup window, so it goes through a full-page redirect
+    if(isStandalone()){await U.signInWithRedirect(auth,prov);return}
+    await U.signInWithPopup(auth,prov);
+  }catch(e){
+    if(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment'){try{await U.signInWithRedirect(auth,prov)}catch(e2){toast('Не удалось войти: '+authErr(e2))}return}
     if(e.code==='auth/popup-closed-by-user'||e.code==='auth/cancelled-popup-request')return;
-    toast('Не удалось войти: '+(e.code||e.message));
+    toast('Не удалось войти: '+authErr(e));
   }
+}
+async function emailAuth(create){
+  if(!fbReady())return;
+  const email=($('#a-email')?.value||'').trim(),pass=$('#a-pass')?.value||'';
+  if(!email||!pass){toast('Впишите почту и пароль');return}
+  const {U,auth}=window.__fb;
+  try{
+    if(create)await U.createUserWithEmailAndPassword(auth,email,pass);
+    else await U.signInWithEmailAndPassword(auth,email,pass);
+    toast('Вход выполнен');
+  }catch(e){toast('Не удалось: '+authErr(e))}
+}
+function signinBlock(){
+  return `<button class="btn" data-act="login">Войти через Google</button>
+  <details class="alt"><summary>Войти по почте и паролю</summary>
+    <form data-form="email" class="emailform">
+      <input class="inp" id="a-email" type="email" autocomplete="email" placeholder="Почта">
+      <input class="inp" id="a-pass" type="password" autocomplete="current-password" placeholder="Пароль, от 6 символов">
+      <div class="row"><button class="btn grow" value="in">Войти</button><button class="btn ghost grow" value="new">Создать аккаунт</button></div>
+    </form>
+  </details>`;
 }
 async function logout(){if(window.__fb){await window.__fb.U.signOut(window.__fb.auth);toast('Вы вышли. Данные остались на телефоне')}}
 
@@ -360,7 +407,7 @@ function viewDay(){
   const left=Math.ceil((S.waterGoal-d.water)/S.glass);
 
   return `
-  ${authReady&&!me&&window.__fb?`<section class="card signin"><h2>Сохранять в облаке</h2><p class="note">Войдите через Google один раз. Данные не пропадут, если сменить или потерять телефон, и будут видны с компьютера.</p><button class="btn" data-act="login">Войти через Google</button></section>`:''}
+  ${authReady&&!me&&window.__fb?`<section class="card signin"><h2>Сохранять в облаке</h2><p class="note">Войдите через Google один раз. Данные не пропадут, если сменить или потерять телефон, и будут видны с компьютера.</p>${signinBlock()}</section>`:''}
   <div class="rings">
     ${ring(pct(sl,S.sleepGoal),'var(--sleep)',d.sleep==null?'—':fmt(sl)+' ч','Сон','sec-sleep')}
     ${ring(pct(d.water,S.waterGoal),'var(--water)',fmt(d.water/1000)+' л','Вода','sec-water')}
@@ -512,7 +559,7 @@ function viewSettings(){
       <p class="note">Данные хранятся в телефоне и копируются в облако, когда есть интернет.</p>
       <button class="btn ghost" data-act="logout">Выйти</button>`
     :`<p class="note">Сейчас данные хранятся только на этом телефоне. После входа они будут копироваться в облако, а то, что уже записано, перенесётся.</p>
-      <button class="btn" data-act="login">Войти через Google</button>`}
+      ${tab==='settings'&&window.__fb?signinBlock():''}`}
   </section>
   <section class="card">
     <h2>Цели на день</h2>
@@ -610,6 +657,7 @@ $('#view').addEventListener('submit',e=>{
     toast(sign>0?'Отложено '+rub(amt):'Снято '+rub(amt));
   }
   if(f==='task'){const t=val('t-text');if(!t)return;clear('t-text');mutate(cur,d=>d.tasks.push({text:t,done:false}))}
+  if(f==='email'){emailAuth(e.submitter&&e.submitter.value==='new');return}
   if(f==='habit'){const t=val('h-text');if(!t||S.habits.includes(t))return;clear('h-text');setSettings(s=>s.habits.push(t))}
 });
 

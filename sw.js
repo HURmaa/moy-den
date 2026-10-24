@@ -1,5 +1,5 @@
 // Offline cache for «Мой день». Bump VERSION when shipping changes.
-const VERSION = 'moy-den-v1';
+const VERSION = 'moy-den-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
