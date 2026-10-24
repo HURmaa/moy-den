@@ -312,8 +312,8 @@ function authErr(e){
 }
 const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 function fbReady(){
+  // navigator.onLine is unreliable on phones, so let Firebase report real network errors
   if(!window.__fb){toast('Облако не загрузилось. Проверьте интернет и перезапустите приложение');return false}
-  if(!navigator.onLine){toast('Для входа нужен интернет');return false}
   return true;
 }
 async function login(){
@@ -342,16 +342,21 @@ async function emailAuth(create){
     toast('Вход выполнен');
   }catch(e){toast('Не удалось: '+authErr(e))}
 }
+let altOpen=false;
 function signinBlock(){
-  return `<button class="btn" data-act="login">Войти через Google</button>
-  <details class="alt"><summary>Войти по почте и паролю</summary>
+  // Chrome blocks Google sign-in inside an installed app, so there email is the way in
+  const sa=isStandalone();
+  return `${sa?'':`<button class="btn" data-act="login">Войти через Google</button>`}
+  <details class="alt" ${sa||altOpen?'open':''}><summary>${sa?'Вход по почте и паролю':'Войти по почте и паролю'}</summary>
     <form data-form="email" class="emailform">
       <input class="inp" id="a-email" type="email" autocomplete="email" placeholder="Почта">
       <input class="inp" id="a-pass" type="password" autocomplete="current-password" placeholder="Пароль, от 6 символов">
       <div class="row"><button class="btn grow" value="in">Войти</button><button class="btn ghost grow" value="new">Создать аккаунт</button></div>
     </form>
-  </details>`;
+  </details>
+  ${sa?`<p class="note">Первый раз нажмите «Создать аккаунт», дальше на любом устройстве «Войти» с той же почтой и паролем.</p>`:''}`;
 }
+document.addEventListener('toggle',e=>{if(e.target.classList&&e.target.classList.contains('alt'))altOpen=e.target.open},true);
 async function logout(){if(window.__fb){await window.__fb.U.signOut(window.__fb.auth);toast('Вы вышли. Данные остались на телефоне')}}
 
 /* ---------- backup ---------- */
