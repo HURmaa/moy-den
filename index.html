@@ -258,11 +258,14 @@ async function initFirebase(){
   try{
     const [A,U,F]=await Promise.all([import(FB+'firebase-app.js'),import(FB+'firebase-auth.js'),import(FB+'firebase-firestore.js')]);
     app=A.initializeApp(FIREBASE_CONFIG);
-    auth=U.getAuth(app);
+    // The popup helper loads a page from firebaseapp.com that Chrome blocks inside an installed app,
+    // and waiting on it stalls every sign-in, so the installed app runs without it (email only)
+    auth=U.initializeAuth(app,{
+      persistence:[U.indexedDBLocalPersistence,U.browserLocalPersistence],
+      ...(isStandalone()?{}:{popupRedirectResolver:U.browserPopupRedirectResolver})});
     store=F.initializeFirestore(app,{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})});
     window.__fb={U,F,auth};
     U.onAuthStateChanged(auth,user=>{authReady=true;if(user)attach(user,F,store);else detach();render()});
-    U.getRedirectResult(auth).catch(e=>toast('Не удалось войти: '+authErr(e)));
   }catch(e){console.warn('Firebase не загрузился',e);authReady=true;setSync('local');render()}
 }
 
@@ -320,27 +323,30 @@ async function login(){
   if(!fbReady())return;
   const {U,auth}=window.__fb,prov=new U.GoogleAuthProvider();
   prov.setCustomParameters({prompt:'select_account'});
-  toast('Открываю вход через Google…');
-  try{
-    // An installed app cannot talk to a popup window, so it goes through a full-page redirect
-    if(isStandalone()){await U.signInWithRedirect(auth,prov);return}
-    await U.signInWithPopup(auth,prov);
-  }catch(e){
-    if(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment'){try{await U.signInWithRedirect(auth,prov)}catch(e2){toast('Не удалось войти: '+authErr(e2))}return}
+  if(isStandalone()){toast('В приложении входите по почте и паролю');return}
+  try{await U.signInWithPopup(auth,prov)}
+  catch(e){
+    if(e.code==='auth/popup-blocked'){toast('Браузер заблокировал окно входа. Разрешите всплывающие окна для этого сайта');return}
     if(e.code==='auth/popup-closed-by-user'||e.code==='auth/cancelled-popup-request')return;
     toast('Не удалось войти: '+authErr(e));
   }
 }
+let authBusy=false;
 async function emailAuth(create){
+  if(authBusy){toast('Подождите, вход уже выполняется…');return}
   if(!fbReady())return;
   const email=($('#a-email')?.value||'').trim(),pass=$('#a-pass')?.value||'';
   if(!email||!pass){toast('Впишите почту и пароль');return}
   const {U,auth}=window.__fb;
+  authBusy=true;
+  toast(create?'Создаю аккаунт…':'Вхожу…');
+  const slow=setTimeout(()=>{if(authBusy)toast('Сервер долго не отвечает. Закройте приложение и откройте снова, повторно не нажимайте')},15000);
   try{
     if(create)await U.createUserWithEmailAndPassword(auth,email,pass);
     else await U.signInWithEmailAndPassword(auth,email,pass);
     toast('Вход выполнен');
   }catch(e){toast('Не удалось: '+authErr(e))}
+  finally{authBusy=false;clearTimeout(slow)}
 }
 let altOpen=false;
 function signinBlock(){
@@ -684,7 +690,12 @@ let lastToday=todayKey();
 setInterval(()=>{const t=todayKey();if(t!==lastToday){if(cur===lastToday)cur=t;lastToday=t;render()}},60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){const t=todayKey();if(t!==lastToday){if(cur===lastToday)cur=t;lastToday=t;render()}}});
 
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(e=>console.warn('SW',e));
+if('serviceWorker' in navigator){
+  // When a new version takes over, reload once so the fresh code runs right away
+  const hadController=!!navigator.serviceWorker.controller;let reloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(hadController&&!reloaded){reloaded=true;location.reload()}});
+  navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(e=>console.warn('SW',e));
+}
 
 loadLocal();setSync('local');render();initFirebase();
 </script>
